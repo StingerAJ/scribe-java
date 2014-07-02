@@ -1,10 +1,13 @@
 
 # Eclipse specific settings
 
-.classpath
-.project
-.settings
+# .classpath
+# .project
+# .settings
 
 # Binaries
-
+bin
 target
+
+# Generated sources
+gen
