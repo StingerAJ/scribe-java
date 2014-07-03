@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+import org.scribe.exceptions.*;
 import org.scribe.utils.*;
 
 /**
@@ -16,6 +17,7 @@ public class Response
   private static final String EMPTY = "";
 
   private int code;
+  private String message;
   private String body;
   private InputStream stream;
   private Map<String, String> headers;
@@ -26,12 +28,13 @@ public class Response
     {
       connection.connect();
       code = connection.getResponseCode();
+      message = connection.getResponseMessage();
       headers = parseHeaders(connection);
-      stream = wasSuccessful() ? connection.getInputStream() : connection.getErrorStream();
-    } catch (UnknownHostException e)
+      stream = isSuccessful() ? connection.getInputStream() : connection.getErrorStream();
+    }
+    catch (UnknownHostException e)
     {
-      code = 404;
-      body = EMPTY;
+      throw new OAuthException("The IP address of a host could not be determined.", e);
     }
   }
 
@@ -51,7 +54,7 @@ public class Response
     return headers;
   }
 
-  private boolean wasSuccessful()
+  public boolean isSuccessful()
   {
     return getCode() >= 200 && getCode() < 400;
   }
@@ -86,6 +89,17 @@ public class Response
   {
     return code;
   }
+  
+  /**
+   * Obtains the HTTP status message.
+   * Returns <code>null</code> if the message can not be discerned from the response (not valid HTTP)
+   * 
+   * @return the status message
+   */
+  public String getMessage() 
+  {
+    return message;
+  }
 
   /**
    * Obtains a {@link Map} containing the HTTP Response Headers
@@ -100,10 +114,9 @@ public class Response
   /**
    * Obtains a single HTTP Header value, or null if undefined
    * 
-   * @param header
-   *          name
+   * @param name the header name.
    * 
-   * @return header value or null
+   * @return header value or null.
    */
   public String getHeader(String name)
   {

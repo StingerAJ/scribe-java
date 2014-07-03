@@ -1,62 +1,55 @@
 package org.scribe.builder.api;
 
 import org.scribe.model.Token;
-import org.scribe.model.Verb;
 
+/**
+ * OAuth API for Evernote
+ *
+ * @author Norbert Potocki
+ */
 public class EvernoteApi extends DefaultApi10a
 {
-  private static final String AUTHORIZATION_URL = "https://www.evernote.com/OAuth.action?oauth_token=%s";
-  
-  @Override
-  public Verb getRequestTokenVerb()
-  {
-    return Verb.GET;
+  protected String serviceUrl() {
+    return "https://www.evernote.com";
   }
 
-	@Override
-	public String getRequestTokenEndpoint()
+  @Override
+  public String getRequestTokenEndpoint()
   {
-		return "https://www.evernote.com/oauth";
-	}
+    return serviceUrl() + "/oauth";
+  }
 
-	@Override
-	public Verb getAccessTokenVerb()
-	{
-	  return Verb.GET;
-	}
+  @Override
+  public String getAccessTokenEndpoint()
+  {
+    return serviceUrl() + "/oauth";
+  }
 
-	@Override
-	public String getAccessTokenEndpoint()
-	{
-		return "https://www.evernote.com/oauth";
-	}
-	
-	@Override
-	public String getAuthorizationUrl(Token requestToken)
-	{
-	  return String.format(AUTHORIZATION_URL, requestToken.getToken());
-	}
+  @Override
+  public String getAuthorizationUrl(Token requestToken)
+  {
+    return String.format(serviceUrl() + "/OAuth.action?oauth_token=%s", requestToken.getToken());
+  }
 
-	public static class Sandbox extends EvernoteApi
-	{
-	  private static final String SANDBOX_URL = "https://sandbox.evernote.com/oauth";
+  /**
+   * Sandbox endpoint
+   */
+  public static class Sandbox extends EvernoteApi
+  {
+    @Override
+    protected String serviceUrl() {
+      return "https://sandbox.evernote.com";
+    }
+  }
 
-	  @Override
-	  public String getRequestTokenEndpoint()
-	  {
-	    return SANDBOX_URL;
-	  }
-
-	  @Override
-	  public String getAccessTokenEndpoint()
-	  {
-	    return SANDBOX_URL;
-	  }
-
-	  @Override
-	  public String getAuthorizationUrl(Token requestToken)
-	  {
-	    return String.format(SANDBOX_URL + "?oauth_token=%s", requestToken.getToken());
-	  }
-	}
+  /**
+   * Yinxiang Biji endpoint
+   */
+  public static class Yinxiang extends EvernoteApi
+  {
+    @Override
+    protected String serviceUrl() {
+      return "https://app.yinxiang.com";
+    }
+  }
 }
