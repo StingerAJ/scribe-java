@@ -3,7 +3,6 @@ package org.scribe.builder.api;
 import org.scribe.model.*;
 
 import org.scribe.utils.*;
-import static org.scribe.utils.URLUtils.*;
 
 public class FacebookApi extends DefaultApi20
 {
@@ -31,21 +30,21 @@ public class FacebookApi extends DefaultApi20
     // Append scope and/or grant type if present
     if(config.hasScope() && !config.hasGrantType())
     {
-      return String.format(SCOPED_AUTHORIZE_URL, config.getApiKey(), formURLEncode(config.getCallback()), formURLEncode(config.getScope())); 
+      return String.format(SCOPED_AUTHORIZE_URL, config.getApiKey(), OAuthEncoder.encode(config.getCallback()), OAuthEncoder.encode(config.getScope())); 
     }
     else if(config.hasScope() && config.hasGrantType())
     {
-      return String.format(SCOPED_GRANT_TYPED_URL, config.getApiKey(),formURLEncode(config.getCallback()),
-                           formURLEncode(config.getScope()),formURLEncode(config.getGrantType()));
+      return String.format(SCOPED_GRANT_TYPED_URL, config.getApiKey(),OAuthEncoder.encode(config.getCallback()),
+                           OAuthEncoder.encode(config.getScope())),OAuthEncoder.encode(config.getGrantType()));
     }
     else if(!config.hasScope() && config.hasGrantType())
     {
-      return String.format(GRANT_TYPED_URL, config.getApiKey(),formURLEncode(config.getCallback()),
-                             formURLEncode(config.getGrantType()));    	
+      return String.format(GRANT_TYPED_URL, config.getApiKey(),OAuthEncoder.encode(config.getCallback()),
+                             OAuthEncoder.encode(config.getGrantType()));    	
     }
     else
     {
-      return String.format(AUTHORIZE_URL, config.getApiKey(), formURLEncode(config.getCallback()));
+      return String.format(AUTHORIZE_URL, config.getApiKey(), OAuthEncoder.encode(config.getCallback()));
     }
   }
 }

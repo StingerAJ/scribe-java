@@ -4,28 +4,37 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import org.scribe.exceptions.*;
-import org.scribe.utils.*;
 
 /**
  * Represents an HTTP Request object
  * 
  * @author Pablo Fernandez
  */
-class Request
+public class Request
 {
   private static final String CONTENT_LENGTH = "Content-Length";
+  private static final String CONTENT_TYPE = "Content-Type";
+  private static RequestTuner NOOP = new RequestTuner() {
+    @Override public void tune(Request _){}
+  };
+  public static final String DEFAULT_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
   private String url;
   private Verb verb;
-  private Map<String, String> querystringParams;
-  private Map<String, String> bodyParams;
+  private ParameterList querystringParams;
+  private ParameterList bodyParams;
   private Map<String, String> headers;
   private String payload = null;
   private HttpURLConnection connection;
   private String charset;
+  private byte[] bytePayload = null;
+  private boolean connectionKeepAlive = false;
+  private boolean followRedirects = true;
+  private Long connectTimeout = null;
+  private Long readTimeout = null;
 
   /**
    * Creates a new Http Request
@@ -37,8 +46,8 @@ class Request
   {
     this.verb = verb;
     this.url = url;
-    this.querystringParams = new HashMap<String, String>();
-    this.bodyParams = new HashMap<String, String>();
+    this.querystringParams = new ParameterList();
+    this.bodyParams = new ParameterList();
     this.headers = new HashMap<String, String>();
   }
 
@@ -49,36 +58,62 @@ class Request
    * @throws RuntimeException
    *           if the connection cannot be created.
    */
-  public Response send()
+  public Response send(RequestTuner tuner)
   {
     try
     {
       createConnection();
-      return doSend();
-    } catch (IOException ioe)
-    {
-      throw new OAuthException("Problems while creating connection", ioe);
+      return doSend(tuner);
     }
+    catch (Exception e)
+    {
+      throw new OAuthConnectionException(e);
+    }
+  }
+
+  public Response send()
+  {
+    return send(NOOP);
   }
 
   private void createConnection() throws IOException
   {
-    String effectiveUrl = URLUtils.appendParametersToQueryString(url, querystringParams);
+    String completeUrl = getCompleteUrl();
     if (connection == null)
     {
-      System.setProperty("http.keepAlive", "false");
-      connection = (HttpURLConnection) new URL(effectiveUrl).openConnection();
+      System.setProperty("http.keepAlive", connectionKeepAlive ? "true" : "false");
+      connection = (HttpURLConnection) new URL(completeUrl).openConnection();
+      connection.setInstanceFollowRedirects(followRedirects);
     }
   }
 
-  Response doSend() throws IOException
+  /**
+   * Returns the complete url (host + resource + encoded querystring parameters).
+   *
+   * @return the complete url.
+   */
+  public String getCompleteUrl()
+  {
+    return querystringParams.appendTo(url);
+  }
+
+  Response doSend(RequestTuner tuner) throws IOException
   {
     connection.setRequestMethod(this.verb.name());
+    if (connectTimeout != null) 
+    {
+      connection.setConnectTimeout(connectTimeout.intValue());
+    }
+    if (readTimeout != null)
+    {
+      connection.setReadTimeout(readTimeout.intValue());
+    }
     addHeaders(connection);
     if (verb.equals(Verb.PUT) || verb.equals(Verb.POST))
     {
-      addBody(connection, getBodyContents());
+      addBody(connection, getByteBodyContents());
     }
+    tuner.tune(this);
     return new Response(connection);
   }
 
@@ -88,13 +123,17 @@ class Request
       conn.setRequestProperty(key, headers.get(key));
   }
 
-  void addBody(HttpURLConnection conn, String content) throws IOException
+  void addBody(HttpURLConnection conn, byte[] content) throws IOException
   {
-    if (this.charset == null)
-      this.charset = Charset.defaultCharset().name();
-    conn.setRequestProperty(CONTENT_LENGTH, String.valueOf(content.getBytes(charset).length));
+    conn.setRequestProperty(CONTENT_LENGTH, String.valueOf(content.length));
+
+    // Set default content type if none is set.
+    if (conn.getRequestProperty(CONTENT_TYPE) == null)
+    {
+      conn.setRequestProperty(CONTENT_TYPE, DEFAULT_CONTENT_TYPE);
+    }
     conn.setDoOutput(true);
-    conn.getOutputStream().write(content.getBytes(charset));
+    conn.getOutputStream().write(content);
   }
 
   /**
@@ -116,7 +155,7 @@ class Request
    */
   public void addBodyParameter(String key, String value)
   {
-    this.bodyParams.put(key, value);
+    this.bodyParams.add(key, value);
   }
 
   /**
@@ -127,7 +166,7 @@ class Request
    */
   public void addQuerystringParameter(String key, String value)
   {
-    this.querystringParams.put(key, value);
+    this.querystringParams.add(key, value);
   }
 
   /**
@@ -146,20 +185,30 @@ class Request
   }
 
   /**
-   * Get a {@link Map} of the query string parameters.
-   * 
-   * @return a map containing the query string parameters
-   * @throws OAuthException if the URL is not valid
+   * Overloaded version for byte arrays
+   *
+   * @param payload
    */
-  public Map<String, String> getQueryStringParams()
+  public void addPayload(byte[] payload)
+  {
+    this.bytePayload = payload.clone();
+  }
+
+  /**
+   * Get a {@link ParameterList} with the query string parameters.
+   * 
+   * @return a {@link ParameterList} containing the query string parameters.
+   * @throws OAuthException if the request URL is not valid.
+   */
+  public ParameterList getQueryStringParams()
   {
     try
     {
-      Map<String, String> params = new HashMap<String, String>();
+      ParameterList result = new ParameterList();
       String queryString = new URL(url).getQuery();
-      params.putAll(URLUtils.queryStringToMap(queryString));
-      params.putAll(this.querystringParams);
-      return params;
+      result.addQuerystring(queryString);
+      result.addAll(querystringParams);
+      return result;
     }
     catch (MalformedURLException mue)
     {
@@ -168,11 +217,11 @@ class Request
   }
 
   /**
-   * Obtains a {@link Map} of the body parameters.
+   * Obtains a {@link ParameterList} of the body parameters.
    * 
-   * @return a map containing the body parameters.
+   * @return a {@link ParameterList}containing the body parameters.
    */
-  public Map<String, String> getBodyParams()
+  public ParameterList getBodyParams()
   {
     return bodyParams;
   }
@@ -188,23 +237,53 @@ class Request
   }
 
   /**
-   * Returns the URL without the port and the query string part.
+   * Returns the URL without the default port and the query string part.
    * 
    * @return the OAuth-sanitized URL
    */
   public String getSanitizedUrl()
   {
-    return url.replaceAll("\\?.*", "").replace("\\:\\d{4}", "");
-  }
+	 if(url.startsWith("http://") && (url.endsWith(":80") || url.contains(":80/"))){
+	   return url.replaceAll("\\?.*", "").replaceAll(":80", "");
+	 }
+	 else  if(url.startsWith("https://") && (url.endsWith(":443") || url.contains(":443/"))){
+	   return url.replaceAll("\\?.*", "").replaceAll(":443", "");
+	 }
+	 else{
+	   return url.replaceAll("\\?.*", "");
+	 }
+   }
 
   /**
    * Returns the body of the request
    * 
    * @return form encoded string
+   * @throws OAuthException if the charset chosen is not supported
    */
   public String getBodyContents()
   {
-    return (payload != null) ? payload : URLUtils.formURLEncodeMap(bodyParams);
+    try
+    {
+      return new String(getByteBodyContents(),getCharset());
+    }
+    catch(UnsupportedEncodingException uee)
+    {
+      throw new OAuthException("Unsupported Charset: "+charset, uee);
+    }
+  }
+
+  byte[] getByteBodyContents()
+  {
+    if (bytePayload != null) return bytePayload;
+    String body = (payload != null) ? payload : bodyParams.asFormUrlEncodedString();
+    try
+    {
+      return body.getBytes(getCharset());
+    }
+    catch(UnsupportedEncodingException uee)
+    {
+      throw new OAuthException("Unsupported Charset: "+getCharset(), uee);
+    }
   }
 
   /**
@@ -228,6 +307,16 @@ class Request
   }
 
   /**
+   * Returns the connection charset. Defaults to {@link Charset} defaultCharset if not set
+   *
+   * @return charset
+   */
+  public String getCharset()
+  {
+    return charset == null ? Charset.defaultCharset().name() : charset;
+  }
+
+  /**
    * Sets the connect timeout for the underlying {@link HttpURLConnection}
    * 
    * @param duration duration of the timeout
@@ -236,7 +325,7 @@ class Request
    */
   public void setConnectTimeout(int duration, TimeUnit unit)
   {
-    this.connection.setConnectTimeout((int) unit.toMillis(duration));
+    this.connectTimeout = unit.toMillis(duration);
   }
 
   /**
@@ -248,7 +337,7 @@ class Request
    */
   public void setReadTimeout(int duration, TimeUnit unit)
   {
-    this.connection.setReadTimeout((int) unit.toMillis(duration));
+    this.readTimeout = unit.toMillis(duration);
   }
 
   /**
@@ -259,6 +348,30 @@ class Request
   public void setCharset(String charsetName)
   {
     this.charset = charsetName;
+  }
+
+  /**
+   * Sets whether the underlying Http Connection is persistent or not.
+   *
+   * @see http://download.oracle.com/javase/1.5.0/docs/guide/net/http-keepalive.html
+   * @param connectionKeepAlive
+   */
+  public void setConnectionKeepAlive(boolean connectionKeepAlive)
+  {
+    this.connectionKeepAlive = connectionKeepAlive;
+  }
+
+  /**
+   * Sets whether the underlying Http Connection follows redirects or not.
+   *
+   * Defaults to true (follow redirects)
+   *
+   * @see http://docs.oracle.com/javase/6/docs/api/java/net/HttpURLConnection.html#setInstanceFollowRedirects(boolean)
+   * @param followRedirects
+   */
+  public void setFollowRedirects(boolean followRedirects)
+  {
+    this.followRedirects = followRedirects;
   }
 
   /*

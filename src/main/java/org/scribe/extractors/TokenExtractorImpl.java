@@ -7,7 +7,7 @@ import org.scribe.model.*;
 import org.scribe.utils.*;
 
 /**
- * Default implementation of {@RequestTokenExtractor} and {@AccessTokenExtractor}. Conforms to OAuth 1.0a
+ * Default implementation of {@link RequestTokenExtractor} and {@link AccessTokenExtractor}. Conforms to OAuth 1.0a
  *
  * The process for extracting access and request tokens is similar so this class can do both things.
  * 
@@ -16,7 +16,7 @@ import org.scribe.utils.*;
 public class TokenExtractorImpl implements RequestTokenExtractor, AccessTokenExtractor
 {
   private static final Pattern TOKEN_REGEX = Pattern.compile("oauth_token=([^&]+)");
-  private static final Pattern SECRET_REGEX = Pattern.compile("oauth_token_secret=([^&]+)");
+  private static final Pattern SECRET_REGEX = Pattern.compile("oauth_token_secret=([^&]*)");
 
   /**
    * {@inheritDoc} 
@@ -34,7 +34,7 @@ public class TokenExtractorImpl implements RequestTokenExtractor, AccessTokenExt
     Matcher matcher = p.matcher(response);
     if (matcher.find() && matcher.groupCount() >= 1)
     {
-      return URLUtils.formURLDecode(matcher.group(1));
+      return OAuthEncoder.decode(matcher.group(1));
     }
     else
     {

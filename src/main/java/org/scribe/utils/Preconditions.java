@@ -12,7 +12,11 @@ import org.scribe.model.OAuthConstants;
 public class Preconditions
 {
   private static final String DEFAULT_MESSAGE = "Received an invalid parameter";
-  private static final Pattern URL_PATTERN = Pattern.compile("[a-zA-Z_-]+://\\S+");
+  
+  // scheme = alpha *( alpha | digit | "+" | "-" | "." )
+  private static final Pattern URL_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*://\\S+");
+
+  private Preconditions(){}
 
   /**
    * Checks that an object is not null.
@@ -61,7 +65,7 @@ public class Preconditions
   public static void checkValidOAuthCallback(String url, String errorMsg)
   {
     checkEmptyString(url, errorMsg);
-    if(url.toLowerCase().compareToIgnoreCase(OAuthConstants.OUT_OF_BAND) != 0)
+    if(url.compareToIgnoreCase(OAuthConstants.OUT_OF_BAND) != 0)
     {
       check(isUrl(url), errorMsg);  
     }
