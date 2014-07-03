@@ -3,23 +3,14 @@ package org.scribe.model;
 import org.scribe.exceptions.OAuthConnectionException;
 import org.scribe.exceptions.OAuthException;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 /**
  * Represents an HTTP Request object
@@ -28,9 +19,9 @@ import javax.net.ssl.X509TrustManager;
  */
 public class Request
 {
-  private static final String CONTENT_LENGTH = "Content-Length";
-  private static final String CONTENT_TYPE = "Content-Type";
-  private static RequestTuner NOOP = new RequestTuner() {
+  public static final String CONTENT_LENGTH = "Content-Length";
+  public static final String CONTENT_TYPE = "Content-Type";
+  static RequestTuner NOOP = new RequestTuner() {
     @Override public void tune(Request _){}
   };
   public static final String DEFAULT_CONTENT_TYPE = "application/x-www-form-urlencoded";
@@ -41,56 +32,22 @@ public class Request
   private ParameterList bodyParams;
   private Map<String, String> headers;
   private String payload = null;
-  private HttpURLConnection connection;
   private String charset;
   private byte[] bytePayload = null;
   private boolean connectionKeepAlive = false;
   private boolean followRedirects = true;
   private Long connectTimeout = null;
   private Long readTimeout = null;
-  
-  /**
-   * Creates a trust-all-certificates SSL socket factory. Encountered 
-   * exceptions are not rethrown.
-   *
-   * @return The SSL socket factory.
-   */
-  public static SSLSocketFactory createTrustAllSocketFactory() {
-  
-      TrustManager[] trustAllCerts = new TrustManager[] {
-          
-          new X509TrustManager() {
-
-              public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[]{}; }
-
-              public void checkClientTrusted(X509Certificate[] certs, String authType) { }
-
-              public void checkServerTrusted(X509Certificate[] certs, String authType) { }
-          }
-      };
-
-      try {
-          SSLContext sc = SSLContext.getInstance("SSL");
-          sc.init(null, trustAllCerts, new SecureRandom());
-          return sc.getSocketFactory();
-
-      } catch (Exception e) {
-          
-          // Ignore
-          return null;
-      }
-  }
-
-  /**
-   * Trust-all-certs (including self-signed) SSL socket factory.
-   */
-  private static SSLSocketFactory trustAllSocketFactory = createTrustAllSocketFactory();
 
   private boolean trustAllCerts = false;
   
   public void setTrustAllCerts(boolean trustAllCerts) {
     this.trustAllCerts = trustAllCerts;
-}
+  }
+
+  public boolean isTrustAllCerts() {
+    return trustAllCerts;
+  }
 
 /**
    * Creates a new Http Request
@@ -114,12 +71,11 @@ public class Request
    * @throws RuntimeException
    *           if the connection cannot be created.
    */
-  public Response send(RequestTuner tuner)
+  public Response send(RequestSender sender, RequestTuner tuner)
   {
     try
     {
-      createConnection();
-      return doSend(tuner);
+      return sender.send(this, tuner);
     }
     catch (Exception e)
     {
@@ -127,28 +83,21 @@ public class Request
     }
   }
 
+  /**
+   * Execute the request and return a {@link Response}
+   * 
+   * @return Http Response
+   * @throws RuntimeException
+   *           if the connection cannot be created.
+   */
+  public Response send(RequestTuner tuner)
+  {
+    return send(UrlConnectionRequestSender.INSTANCE, tuner);
+  }
+
   public Response send()
   {
     return send(NOOP);
-  }
-
-  private void createConnection() throws IOException
-  {
-    String completeUrl = getCompleteUrl();
-    if (connection == null)
-    {
-      System.setProperty("http.keepAlive", connectionKeepAlive ? "true" : "false");
-      connection = (HttpURLConnection) new URL(completeUrl).openConnection();
-      connection.setInstanceFollowRedirects(followRedirects);
-    }
-    // Set trust all certs SSL factory?
-    if (connection instanceof HttpsURLConnection && trustAllCerts) {
-    
-        if (trustAllSocketFactory == null)
-            throw new RuntimeException("Couldn't obtain trust-all SSL socket factory");
-    
-        ((HttpsURLConnection)connection).setSSLSocketFactory(trustAllSocketFactory);
-    }
   }
 
   /**
@@ -159,45 +108,6 @@ public class Request
   public String getCompleteUrl()
   {
     return querystringParams.appendTo(url);
-  }
-
-  Response doSend(RequestTuner tuner) throws IOException
-  {
-    connection.setRequestMethod(this.verb.name());
-    if (connectTimeout != null) 
-    {
-      connection.setConnectTimeout(connectTimeout.intValue());
-    }
-    if (readTimeout != null)
-    {
-      connection.setReadTimeout(readTimeout.intValue());
-    }
-    addHeaders(connection);
-    if (verb.equals(Verb.PUT) || verb.equals(Verb.POST))
-    {
-      addBody(connection, getByteBodyContents());
-    }
-    tuner.tune(this);
-    return new Response(connection);
-  }
-
-  void addHeaders(HttpURLConnection conn)
-  {
-    for (String key : headers.keySet())
-      conn.setRequestProperty(key, headers.get(key));
-  }
-
-  void addBody(HttpURLConnection conn, byte[] content) throws IOException
-  {
-    conn.setRequestProperty(CONTENT_LENGTH, String.valueOf(content.length));
-
-    // Set default content type if none is set.
-    if (conn.getRequestProperty(CONTENT_TYPE) == null)
-    {
-      conn.setRequestProperty(CONTENT_TYPE, DEFAULT_CONTENT_TYPE);
-    }
-    conn.setDoOutput(true);
-    conn.getOutputStream().write(content);
   }
 
   /**
@@ -438,17 +348,29 @@ public class Request
     this.followRedirects = followRedirects;
   }
 
-  /*
-   * We need this in order to stub the connection object for test cases
-   */
-  void setConnection(HttpURLConnection connection)
-  {
-    this.connection = connection;
-  }
-
   @Override
   public String toString()
   {
     return String.format("@Request(%s %s)", getVerb(), getUrl());
+  }
+
+  public boolean isConnectionKeepAlive()
+  {
+    return connectionKeepAlive;
+  }
+
+  public boolean isFollowRedirects()
+  {
+    return followRedirects;
+  }
+
+  public Long getReadTimeout()
+  {
+    return readTimeout;
+  }
+
+  public Long getConnectTimeout()
+  {
+    return connectTimeout;
   }
 }

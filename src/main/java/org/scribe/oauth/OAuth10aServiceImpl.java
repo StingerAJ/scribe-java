@@ -66,7 +66,7 @@ private boolean trustAllCerts;
     appendSignature(request);
 
     config.log("sending request...");
-    Response response = request.send(tuner);
+    Response response = request.send(api.getRequestSender(), tuner);
     String body = response.getBody();
 
     config.log("response status code: " + response.getCode());
@@ -113,7 +113,7 @@ private boolean trustAllCerts;
     appendSignature(request);
     
     config.log("sending request...");
-    Response response = request.send(tuner);
+    Response response = request.send(api.getRequestSender(), tuner);
     String body = response.getBody();
     
     config.log("response status code: " + response.getCode());
