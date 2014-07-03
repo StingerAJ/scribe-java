@@ -1,11 +1,18 @@
 package org.scribe.oauth;
 
-import java.util.*;
+import org.scribe.builder.api.DefaultApi10a;
+import org.scribe.model.OAuthConfig;
+import org.scribe.model.OAuthConstants;
+import org.scribe.model.OAuthRequest;
+import org.scribe.model.Request;
+import org.scribe.model.RequestTuner;
+import org.scribe.model.Response;
+import org.scribe.model.Token;
+import org.scribe.model.Verifier;
+import org.scribe.services.Base64Encoder;
+import org.scribe.utils.MapUtils;
 
-import org.scribe.builder.api.*;
-import org.scribe.model.*;
-import org.scribe.services.*;
-import org.scribe.utils.*;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -19,6 +26,8 @@ public class OAuth10aServiceImpl implements OAuthService
 
   private OAuthConfig config;
   private DefaultApi10a api;
+
+private boolean trustAllCerts;
 
   /**
    * Default constructor
@@ -51,6 +60,7 @@ public class OAuth10aServiceImpl implements OAuthService
     OAuthRequest request = new OAuthRequest(api.getRequestTokenVerb(), api.getRequestTokenEndpoint());
 
     config.log("setting oauth_callback to " + config.getCallback());
+    request.setTrustAllCerts(trustAllCerts);
     request.addOAuthParameter(OAuthConstants.CALLBACK, config.getCallback());
     addOAuthParams(request, OAuthConstants.EMPTY_TOKEN);
     appendSignature(request);
@@ -94,6 +104,7 @@ public class OAuth10aServiceImpl implements OAuthService
   {
     config.log("obtaining access token from " + api.getAccessTokenEndpoint());
     OAuthRequest request = new OAuthRequest(api.getAccessTokenVerb(), api.getAccessTokenEndpoint());
+    request.setTrustAllCerts(trustAllCerts);
     request.addOAuthParameter(OAuthConstants.TOKEN, requestToken.getToken());
     request.addOAuthParameter(OAuthConstants.VERIFIER, verifier.getValue());
 
@@ -174,6 +185,11 @@ public class OAuth10aServiceImpl implements OAuthService
         }
         break;
     }
+  }
+
+  @Override
+  public void setTrustAllCerts(boolean trustAllCerts) {
+    this.trustAllCerts = trustAllCerts;
   }
 
   private static class TimeoutTuner extends RequestTuner

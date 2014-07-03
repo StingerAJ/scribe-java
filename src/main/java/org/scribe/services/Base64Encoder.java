@@ -19,10 +19,11 @@ public abstract class Base64Encoder
     {
       return new CommonsEncoder();
     }
-    else
-    {
-      return new DatatypeConverterEncoder();
-    }
+    return null;
+//    else
+//    {
+//      return new DatatypeConverterEncoder();
+//    }
   }
 
   public static String type()

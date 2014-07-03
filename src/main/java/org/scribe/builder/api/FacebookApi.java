@@ -1,8 +1,8 @@
 package org.scribe.builder.api;
 
-import org.scribe.model.*;
-
-import org.scribe.utils.*;
+import org.scribe.model.OAuthConfig;
+import org.scribe.utils.OAuthEncoder;
+import org.scribe.utils.Preconditions;
 
 public class FacebookApi extends DefaultApi20
 {
@@ -35,7 +35,7 @@ public class FacebookApi extends DefaultApi20
     else if(config.hasScope() && config.hasGrantType())
     {
       return String.format(SCOPED_GRANT_TYPED_URL, config.getApiKey(),OAuthEncoder.encode(config.getCallback()),
-                           OAuthEncoder.encode(config.getScope())),OAuthEncoder.encode(config.getGrantType()));
+                           OAuthEncoder.encode(config.getScope()),OAuthEncoder.encode(config.getGrantType()));
     }
     else if(!config.hasScope() && config.hasGrantType())
     {

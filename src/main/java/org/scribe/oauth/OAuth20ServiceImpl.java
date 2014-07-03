@@ -1,7 +1,13 @@
 package org.scribe.oauth;
 
-import org.scribe.builder.api.*;
-import org.scribe.model.*;
+import org.scribe.builder.api.DefaultApi20;
+import org.scribe.model.OAuthConfig;
+import org.scribe.model.OAuthConstants;
+import org.scribe.model.OAuthRequest;
+import org.scribe.model.Response;
+import org.scribe.model.Token;
+import org.scribe.model.Verb;
+import org.scribe.model.Verifier;
 
 public class OAuth20ServiceImpl implements OAuthService
 {
@@ -9,6 +15,8 @@ public class OAuth20ServiceImpl implements OAuthService
   
   private final DefaultApi20 api;
   private final OAuthConfig config;
+
+private boolean trustAllCerts;
   
   /**
    * Default constructor
@@ -27,14 +35,26 @@ public class OAuth20ServiceImpl implements OAuthService
    */
   public Token getAccessToken(Token requestToken, Verifier verifier)
   {
-    OAuthRequest request = new OAuthRequest(api.getAccessTokenVerb(), api.getAccessTokenEndpoint());
-    request.addQuerystringParameter(OAuthConstants.CLIENT_ID, config.getApiKey());
-    request.addQuerystringParameter(OAuthConstants.CLIENT_SECRET, config.getApiSecret());
-    // In case of Client Credentials, verfier is not required
-    if(verifier != null) request.addQuerystringParameter(OAuthConstants.CODE, verifier.getValue());
-    request.addQuerystringParameter(OAuthConstants.REDIRECT_URI, config.getCallback());
-    if(config.hasScope()) request.addQuerystringParameter(OAuthConstants.SCOPE, config.getScope());
-    if(config.hasGrantType()) request.addQuerystringParameter(OAuthConstants.GRANT_TYPE, config.getGrantType());
+    Verb verb = api.getAccessTokenVerb();
+    OAuthRequest request = new OAuthRequest(verb, api.getAccessTokenEndpoint());
+    request.setTrustAllCerts(trustAllCerts);
+    if (verb == Verb.GET) {
+        request.addQuerystringParameter(OAuthConstants.CLIENT_ID, config.getApiKey());
+        request.addQuerystringParameter(OAuthConstants.CLIENT_SECRET, config.getApiSecret());
+        // In case of Client Credentials, verfier is not required
+        if(verifier != null) request.addQuerystringParameter(OAuthConstants.CODE, verifier.getValue());
+        request.addQuerystringParameter(OAuthConstants.REDIRECT_URI, config.getCallback());
+        if(config.hasScope()) request.addQuerystringParameter(OAuthConstants.SCOPE, config.getScope());
+        if(config.hasGrantType()) request.addQuerystringParameter(OAuthConstants.GRANT_TYPE, config.getGrantType());
+    } else if (verb == Verb.POST) {
+        request.addBodyParameter(OAuthConstants.CLIENT_ID, config.getApiKey());
+        request.addBodyParameter(OAuthConstants.CLIENT_SECRET, config.getApiSecret());
+        // In case of Client Credentials, verfier is not required
+        if(verifier != null) request.addBodyParameter(OAuthConstants.CODE, verifier.getValue());
+        request.addBodyParameter(OAuthConstants.REDIRECT_URI, config.getCallback());
+        if(config.hasScope()) request.addBodyParameter(OAuthConstants.SCOPE, config.getScope());
+        if(config.hasGrantType()) request.addBodyParameter(OAuthConstants.GRANT_TYPE, config.getGrantType());
+    }
     Response response = request.send();
     return api.getAccessTokenExtractor().extract(response.getBody());
   }
@@ -60,7 +80,10 @@ public class OAuth20ServiceImpl implements OAuthService
    */
   public void signRequest(Token accessToken, OAuthRequest request)
   {
-    request.addQuerystringParameter(OAuthConstants.ACCESS_TOKEN, accessToken.getToken());
+    if (api.getAccessTokenVerb() == Verb.GET)
+        request.addQuerystringParameter(OAuthConstants.ACCESS_TOKEN, accessToken.getToken());
+    else if (api.getAccessTokenVerb() == Verb.POST)
+        request.addBodyParameter(OAuthConstants.ACCESS_TOKEN, accessToken.getToken());
   }
 
   /**
@@ -71,4 +94,8 @@ public class OAuth20ServiceImpl implements OAuthService
     return api.getAuthorizationUrl(config);
   }
 
+  @Override
+  public void setTrustAllCerts(boolean trustAllCerts) {
+    this.trustAllCerts = trustAllCerts;
+  }
 }

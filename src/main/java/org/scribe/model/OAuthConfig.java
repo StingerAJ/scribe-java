@@ -1,6 +1,6 @@
 package org.scribe.model;
 
-import java.io.*;
+import java.io.OutputStream;
 
 /**
  * Parameter object that groups OAuth config values
@@ -83,7 +83,6 @@ public class OAuthConfig
   {
     return grantType != null;	  
   }
-}
 
   public void log(String message)
   {

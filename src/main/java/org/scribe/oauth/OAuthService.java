@@ -1,6 +1,8 @@
 package org.scribe.oauth;
 
-import org.scribe.model.*;
+import org.scribe.model.OAuthRequest;
+import org.scribe.model.Token;
+import org.scribe.model.Verifier;
 
 /**
  * The main Scribe object. 
@@ -18,6 +20,8 @@ public interface OAuthService
    */
   public Token getRequestToken();
 
+  public void setTrustAllCerts(boolean trustAllCerts);
+  
   /**
    * Retrieve the access token
    * 

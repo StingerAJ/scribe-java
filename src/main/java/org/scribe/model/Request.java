@@ -1,12 +1,25 @@
 package org.scribe.model;
 
-import java.io.*;
-import java.net.*;
-import java.nio.charset.*;
-import java.util.*;
-import java.util.concurrent.*;
+import org.scribe.exceptions.OAuthConnectionException;
+import org.scribe.exceptions.OAuthException;
 
-import org.scribe.exceptions.*;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Represents an HTTP Request object
@@ -35,8 +48,51 @@ public class Request
   private boolean followRedirects = true;
   private Long connectTimeout = null;
   private Long readTimeout = null;
+  
+  /**
+   * Creates a trust-all-certificates SSL socket factory. Encountered 
+   * exceptions are not rethrown.
+   *
+   * @return The SSL socket factory.
+   */
+  public static SSLSocketFactory createTrustAllSocketFactory() {
+  
+      TrustManager[] trustAllCerts = new TrustManager[] {
+          
+          new X509TrustManager() {
+
+              public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[]{}; }
+
+              public void checkClientTrusted(X509Certificate[] certs, String authType) { }
+
+              public void checkServerTrusted(X509Certificate[] certs, String authType) { }
+          }
+      };
+
+      try {
+          SSLContext sc = SSLContext.getInstance("SSL");
+          sc.init(null, trustAllCerts, new SecureRandom());
+          return sc.getSocketFactory();
+
+      } catch (Exception e) {
+          
+          // Ignore
+          return null;
+      }
+  }
 
   /**
+   * Trust-all-certs (including self-signed) SSL socket factory.
+   */
+  private static SSLSocketFactory trustAllSocketFactory = createTrustAllSocketFactory();
+
+  private boolean trustAllCerts = false;
+  
+  public void setTrustAllCerts(boolean trustAllCerts) {
+    this.trustAllCerts = trustAllCerts;
+}
+
+/**
    * Creates a new Http Request
    * 
    * @param verb Http Verb (GET, POST, etc)
@@ -84,6 +140,14 @@ public class Request
       System.setProperty("http.keepAlive", connectionKeepAlive ? "true" : "false");
       connection = (HttpURLConnection) new URL(completeUrl).openConnection();
       connection.setInstanceFollowRedirects(followRedirects);
+    }
+    // Set trust all certs SSL factory?
+    if (connection instanceof HttpsURLConnection && trustAllCerts) {
+    
+        if (trustAllSocketFactory == null)
+            throw new RuntimeException("Couldn't obtain trust-all SSL socket factory");
+    
+        ((HttpsURLConnection)connection).setSSLSocketFactory(trustAllSocketFactory);
     }
   }
 
